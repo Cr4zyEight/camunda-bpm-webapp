@@ -24,9 +24,11 @@ var angular = require('../../../../camunda-bpm-sdk-js/vendor/angular'),
 module.exports = [
   'camAPI',
   'debounce',
-  function(camAPI, debounce) {
+  '$timeout',
+  function(camAPI, debounce, $timeout) {
     return {
       scope: {
+        profile: '=camWidgetPasswordProfile',
         password: '=camWidgetPasswordPassword',
         isValid: '=?camWidgetPasswordValid'
       },
@@ -67,6 +69,20 @@ module.exports = [
           createRestCall();
         };
 
+        let profile = null;
+        $timeout(function() {
+          $scope.$watch(
+            'profile',
+            value => {
+              if (value) {
+                profile = value;
+                handlePasswordUpdate();
+              }
+            },
+            true
+          );
+        });
+
         // Wait a second for more user input before validating
         var createRestCall = debounce(function() {
           if (!$scope.password) {
@@ -74,28 +90,47 @@ module.exports = [
           }
 
           passwordPolicyProvider
-            .validate($scope.password, function(err, res) {
-              if (err) {
-                $scope.loadingState = 'NOT_OK';
-                $scope.tooltip = 'PASSWORD_POLICY_TOOLTIP_ERROR';
-                return;
-              }
-              if (res.valid) {
-                $scope.loadingState = 'OK';
-                $scope.isValid = true;
-              } else {
-                $scope.loadingState = 'NOT_OK';
-                $scope.isValid = false;
+            .validate(
+              {
+                password: $scope.password,
+                profile: {
+                  id: sanitize(profile.id),
+                  firstName: sanitize(profile.firstName),
+                  lastName: sanitize(profile.lastName),
+                  email: sanitize(profile.email)
+                }
+              },
+              function(err, res) {
+                if (err) {
+                  $scope.loadingState = 'NOT_OK';
+                  $scope.tooltip = 'PASSWORD_POLICY_TOOLTIP_ERROR';
+                  return;
+                }
+                if (res.valid) {
+                  $scope.loadingState = 'OK';
+                  $scope.isValid = true;
+                } else {
+                  $scope.loadingState = 'NOT_OK';
+                  $scope.isValid = false;
 
-                $scope.tooltip = 'PASSWORD_POLICY_TOOLTIP_PARTIAL';
+                  $scope.tooltip = 'PASSWORD_POLICY_TOOLTIP_PARTIAL';
 
-                $scope.rules = res.rules;
+                  $scope.rules = res.rules;
+                }
               }
-            })
+            )
             .catch(angular.noop);
         }, 1000);
 
         $scope.$watch('[password]', handlePasswordUpdate, true);
+
+        function sanitize(value) {
+          if (value === undefined) {
+            return '';
+          }
+
+          return value === null ? '' : value;
+        }
       },
       template: template
     };
